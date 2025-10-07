@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Cloud Scaling Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .status-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-card h3 {
+            font-size: 0.9em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .status-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .status-card .label {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .badge.active {
+            background: #10b981;
+            color: white;
+        }
+
+        .badge.inactive {
+            background: #6b7280;
+            color: white;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .chart-card h3 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.3em;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .data-table-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+        }
+
+        .data-table-card h3 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.3em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #ef4444;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .refresh-info {
+            text-align: center;
+            color: white;
+            margin-top: 20px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Intelligent Cloud Scaling Dashboard</h1>
+            <p>Real-time monitoring and auto-scaling visualization</p>
+        </div>
+
+        <div id="loading" class="loading pulse">
+            Loading dashboard data...
+        </div>
+
+        <div id="error" style="display: none;"></div>
+
+        <div id="dashboard" style="display: none;">
+            <!-- Status Cards -->
+            <div class="status-bar">
+                <div class="status-card">
+                    <h3>Active Servers</h3>
+                    <div class="value" id="serverCount">-</div>
+                    <div class="label">Current Capacity</div>
+                </div>
+
+                <div class="status-card">
+                    <h3>Current CPU</h3>
+                    <div class="value" id="currentCpu">-</div>
+                    <div class="label">Utilization %</div>
+                </div>
+
+                <div class="status-card">
+                    <h3>Sale Status</h3>
+                    <div class="value" id="saleStatus">-</div>
+                    <div class="badge" id="saleBadge">Checking...</div>
+                </div>
+
+                <div class="status-card">
+                    <h3>Last Updated</h3>
+                    <div class="value" id="lastUpdate" style="font-size: 1.2em;">-</div>
+                    <div class="label">UTC Time</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-container">
+                <div class="chart-card">
+                    <h3>📊 CPU Utilization Over Time</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="cpuChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3>🖥️ Server Count Over Time</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="serverChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-container">
+                <div class="chart-card">
+                    <h3>🌐 Network Traffic</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="networkChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3>📈 Request Count</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="requestChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Data Table -->
+            <div class="data-table-card">
+                <h3>📋 Recent Metrics (Last 20 Entries)</h3>
+                <div style="overflow-x: auto;">
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>CPU %</th>
+                                <th>Network In</th>
+                                <th>Requests</th>
+                                <th>Sale Active</th>
+                                <th>Servers</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="refresh-info">
+            Auto-refreshing every 30 seconds • API: <span id="apiEndpoint">Not configured</span>
+        </div>
+    </div>
+
+    <script>
+        // Configuration - REPLACE WITH YOUR API GATEWAY ENDPOINT
+        const API_ENDPOINT = 'https://YOUR-API-ID.execute-api.YOUR-REGION.amazonaws.com/prod/dashboard';
+        const REFRESH_INTERVAL = 30000; // 30 seconds
+
+        // Chart instances
+        let cpuChart, serverChart, networkChart, requestChart;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('apiEndpoint').textContent = API_ENDPOINT;
+            initializeCharts();
+            fetchDashboardData();
+            setInterval(fetchDashboardData, REFRESH_INTERVAL);
+        });
+
+        function initializeCharts() {
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        grid: {
+                            display: false
+                        }
+                    },
+                    y: {
+                        display: true,
+                        beginAtZero: true
+                    }
+                }
+            };
+
+            // CPU Chart
+            const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+            cpuChart = new Chart(cpuCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: chartOptions
+            });
+
+            // Server Chart
+            const serverCtx = document.getElementById('serverChart').getContext('2d');
+            serverChart = new Chart(serverCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Servers',
+                        data: [],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        stepped: true
+                    }]
+                },
+                options: chartOptions
+            });
+
+            // Network Chart
+            const networkCtx = document.getElementById('networkChart').getContext('2d');
+            networkChart = new Chart(networkCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Network In',
+                        data: [],
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: chartOptions
+            });
+
+            // Request Chart
+            const requestCtx = document.getElementById('requestChart').getContext('2d');
+            requestChart = new Chart(requestCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Requests',
+                        data: [],
+                        backgroundColor: '#8b5cf6',
+                        borderColor: '#7c3aed',
+                        borderWidth: 1
+                    }]
+                },
+                options: chartOptions
+            });
+        }
+
+        async function fetchDashboardData() {
+            try {
+                const response = await fetch(API_ENDPOINT);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                updateDashboard(data);
+                
+                // Hide loading, show dashboard
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error fetching dashboard data:', error);
+                showError(error.message);
+            }
+        }
+
+        function updateDashboard(data) {
+            // Update status cards
+            document.getElementById('serverCount').textContent = data.current_server_count;
+            
+            const latestData = data.historical_data[data.historical_data.length - 1];
+            if (latestData) {
+                document.getElementById('currentCpu').textContent = latestData.cpu.toFixed(1) + '%';
+            }
+            
+            const saleStatus = data.is_sale_active === 1 ? 'ACTIVE' : 'INACTIVE';
+            document.getElementById('saleStatus').textContent = saleStatus;
+            
+            const saleBadge = document.getElementById('saleBadge');
+            saleBadge.textContent = saleStatus;
+            saleBadge.className = 'badge ' + (data.is_sale_active === 1 ? 'active' : 'inactive');
+            
+            const updateTime = new Date(data.last_updated || new Date());
+            document.getElementById('lastUpdate').textContent = updateTime.toLocaleTimeString();
+            
+            // Update charts
+            updateCharts(data.historical_data);
+            
+            // Update table
+            updateTable(data.historical_data);
+        }
+
+        function updateCharts(historicalData) {
+            // Prepare data
+            const labels = historicalData.map(d => {
+                const date = new Date(d.timestamp);
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            });
+            
+            const cpuData = historicalData.map(d => d.cpu);
+            const serverData = historicalData.map(d => d.server_count_at_time);
+            const networkData = historicalData.map(d => d.network_in);
+            const requestData = historicalData.map(d => d.request_count);
+            
+            // Update CPU Chart
+            cpuChart.data.labels = labels;
+            cpuChart.data.datasets[0].data = cpuData;
+            cpuChart.update('none');
+            
+            // Update Server Chart
+            serverChart.data.labels = labels;
+            serverChart.data.datasets[0].data = serverData;
+            serverChart.update('none');
+            
+            // Update Network Chart
+            networkChart.data.labels = labels;
+            networkChart.data.datasets[0].data = networkData;
+            networkChart.update('none');
+            
+            // Update Request Chart (show last 30 points for readability)
+            const last30 = historicalData.slice(-30);
+            requestChart.data.labels = last30.map(d => {
+                const date = new Date(d.timestamp);
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            });
+            requestChart.data.datasets[0].data = last30.map(d => d.request_count);
+            requestChart.update('none');
+        }
+
+        function updateTable(historicalData) {
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '';
+            
+            // Show last 20 entries
+            const recentData = historicalData.slice(-20).reverse();
+            
+            recentData.forEach(row => {
+                const tr = document.createElement('tr');
+                const timestamp = new Date(row.timestamp).toLocaleString();
+                
+                tr.innerHTML = `
+                    <td>${timestamp}</td>
+                    <td>${row.cpu.toFixed(1)}%</td>
+                    <td>${row.network_in.toFixed(1)}</td>
+                    <td>${row.request_count.toFixed(0)}</td>
+                    <td>${row.is_sale_active === 1 ? '✅ Yes' : '❌ No'}</td>
+                    <td>${row.server_count_at_time}</td>
+                `;
+                
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.className = 'error';
+            errorDiv.textContent = `Error: ${message}. Please check your API endpoint configuration.`;
+            errorDiv.style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

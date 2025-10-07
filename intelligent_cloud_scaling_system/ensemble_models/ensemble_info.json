@@ -1,0 +1,62 @@
+[
+  {
+    "model_id": 0,
+    "test_loss": 0.004919290076941252,
+    "config": {
+      "hidden_size": 128,
+      "num_layers": 3,
+      "dropout": 0.2,
+      "learning_rate": 0.0005,
+      "batch_size": 64,
+      "epochs": 50
+    }
+  },
+  {
+    "model_id": 1,
+    "test_loss": 0.004488837439566851,
+    "config": {
+      "hidden_size": 96,
+      "num_layers": 2,
+      "dropout": 0.3,
+      "learning_rate": 0.001,
+      "batch_size": 32,
+      "epochs": 50
+    }
+  },
+  {
+    "model_id": 2,
+    "test_loss": 0.004820758942514658,
+    "config": {
+      "hidden_size": 160,
+      "num_layers": 3,
+      "dropout": 0.15,
+      "learning_rate": 0.0003,
+      "batch_size": 128,
+      "epochs": 50
+    }
+  },
+  {
+    "model_id": 3,
+    "test_loss": 0.004666625522077084,
+    "config": {
+      "hidden_size": 128,
+      "num_layers": 4,
+      "dropout": 0.25,
+      "learning_rate": 0.0007,
+      "batch_size": 64,
+      "epochs": 50
+    }
+  },
+  {
+    "model_id": 4,
+    "test_loss": 0.005656201392412186,
+    "config": {
+      "hidden_size": 112,
+      "num_layers": 2,
+      "dropout": 0.2,
+      "learning_rate": 0.0004,
+      "batch_size": 96,
+      "epochs": 50
+    }
+  }
+]
