@@ -6,8 +6,10 @@ from sklearn.preprocessing import MinMaxScaler
 import os
 
 # --- Configuration ---
-LOCAL_MODEL_PATH = "lstm_model.pth"
-LOCAL_DATA_PATH = "multi_metric_data.csv"
+# Get the absolute path to the script's directory to build robust paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_MODEL_PATH = os.path.join(SCRIPT_DIR, "..", "Trained Models", "lstm_model.pth")
+LOCAL_DATA_PATH = os.path.join(SCRIPT_DIR, "..", "Data Files", "multi_metric_data.csv")
 
 # Define the same LSTM model architecture used in training
 class LSTMModel(nn.Module):

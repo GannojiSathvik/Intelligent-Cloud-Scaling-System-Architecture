@@ -1,20 +1,44 @@
 import json
 import boto3
 import os
+import torch
+import torch.nn as nn
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+import pandas as pd
+import csv
+from io import StringIO
 
 # --- Configuration ---
 S3_BUCKET_NAME = "my-intelligent-scaling-data-bucket"
 DATA_FILE_KEY = "multi_metric_data.csv"
-MODEL_FILE_KEY = "lstm_model.pth"
-AUTO_SCALING_GROUP_NAME = "intelligent-scaling-demo-sathvik"
+MODEL_FILE_KEY = "models/lstm_model_optimized.pth" # Corrected path from README
+# Allow overriding the ASG name via environment variable for flexibility in different environments
+AUTO_SCALING_GROUP_NAME = os.getenv("AUTO_SCALING_GROUP_NAME", "intelligent-scaling-demo-sathvik")
 LOCAL_MODEL_PATH = "/tmp/lstm_model.pth"
 
 # Scaling Thresholds
-CPU_UPPER_THRESHOLD = 70.0  # Scale up if predicted CPU > 70%
-CPU_LOWER_THRESHOLD = 35.0  # Scale down if predicted CPU < 35%
+CPU_UPPER_THRESHOLD = 70.0
+CPU_LOWER_THRESHOLD = 35.0
 
 s3_client = boto3.client('s3')
 autoscaling_client = boto3.client('autoscaling')
+
+# Define the same LSTM model architecture used in training
+class LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, output_size):
+        super(LSTMModel, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
+        out, _ = self.lstm(x, (h0, c0))
+        out = self.fc(out[:, -1, :])
+        return out
 
 def lambda_handler(event, context):
     """
@@ -22,80 +46,70 @@ def lambda_handler(event, context):
     and adjusts the Desired Capacity of an Auto Scaling Group.
     """
     try:
-        # --- 1. Model path disabled in this environment ---
-        # We intentionally use a lightweight heuristic (no NumPy/Torch/Sklearn) for Lambda demo
-        print("Using heuristic prediction path (no external ML libraries).")
+        # --- 1. Download Model from S3 ---
+        print(f"Downloading model '{MODEL_FILE_KEY}' from S3 bucket '{S3_BUCKET_NAME}'...")
+        s3_client.download_file(S3_BUCKET_NAME, MODEL_FILE_KEY, LOCAL_MODEL_PATH)
+        print("Model downloaded successfully.")
 
         # --- 2. Fetch the Latest Data Sequence from S3 ---
-        # Use a pandas-free path to avoid dependency when falling back
-        import csv
-        from io import StringIO
-        try:
-            obj = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=DATA_FILE_KEY)
-            content = obj['Body'].read().decode('utf-8')
-            rows = [r for r in csv.reader(StringIO(content))]
-            # Expect header in first row
-            header = rows[0] if rows else []
-            data_rows = rows[1:] if len(rows) > 1 else []
-            # Filter malformed rows (need at least 5 cols)
-            data_rows = [r for r in data_rows if isinstance(r, list) and len(r) >= 5]
-            if len(data_rows) < 1:
-                return {
-                    'statusCode': 200,
-                    'body': json.dumps('No valid data rows available yet. Skipping scaling.')
-                }
-            # Use up to last 12 rows
-            latest_rows = data_rows[-12:] if len(data_rows) >= 12 else data_rows
-            print(f"Successfully fetched {len(latest_rows)} latest data rows.")
-        except Exception as e:
-            return f"Error: Failed to read data from S3. {e}"
+        print(f"Fetching data from '{DATA_FILE_KEY}'...")
+        obj = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=DATA_FILE_KEY)
+        content = obj['Body'].read().decode('utf-8')
+        
+        df = pd.read_csv(StringIO(content))
+        
+        if len(df) < 12:
+            return {
+                'statusCode': 200,
+                'body': json.dumps('Not enough data to create a sequence (need at least 12 data points).')
+            }
+        
+        latest_data = df.tail(12)
+        print(f"Successfully fetched {len(latest_data)} latest data rows.")
 
-        # --- 3. Prepare data for heuristic ---
+        # --- 3. Preprocess the data ---
         features = ['cpu_utilization', 'network_in', 'request_count', 'is_sale_active']
-        # Column indices based on expected CSV: timestamp,cpu_utilization,network_in,request_count,is_sale_active
-        CPU_COL = 1
-        NET_COL = 2
-        REQ_COL = 3
-        SALE_COL = 4
+        sequence_data = latest_data[features].values
 
-        # --- 4. Compute heuristic prediction ---
-        try:
-            cpu_values = []
-            for r in latest_rows:
-                try:
-                    cpu_values.append(float(r[CPU_COL]))
-                except Exception:
-                    continue
-            if not cpu_values:
-                return {
-                    'statusCode': 200,
-                    'body': json.dumps('No numeric CPU values available for heuristic. Skipping scaling.')
-                }
-            predicted_cpu = sum(cpu_values) / len(cpu_values)
-            print(f"Heuristic prediction (avg of {len(cpu_values)} rows): CPU Utilization = {predicted_cpu:.2f}%")
-        except Exception as e:
-            return f"Error: Failed heuristic computation: {e}"
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        scaler.fit(df[features].values)
+        scaled_sequence = scaler.transform(sequence_data)
+
+        input_sequence = np.reshape(scaled_sequence, (1, 12, len(features)))
+        input_tensor = torch.tensor(input_sequence, dtype=torch.float32)
+
+        # --- 4. Load Model and Make Prediction ---
+        input_size = 4
+        hidden_size = 50
+        num_layers = 2
+        output_size = 1
+        
+        model = LSTMModel(input_size, hidden_size, num_layers, output_size)
+        model.load_state_dict(torch.load(LOCAL_MODEL_PATH))
+        model.eval()
+
+        with torch.no_grad():
+            predicted_scaled_cpu = model(input_tensor).item()
+
+        dummy_array = np.zeros((1, len(features)))
+        dummy_array[0, 0] = predicted_scaled_cpu
+        predicted_cpu = scaler.inverse_transform(dummy_array)[0, 0]
+        
+        print(f"Model prediction: CPU Utilization = {predicted_cpu:.2f}%")
 
         # --- 5. Implement Scaling Logic ---
         asg_resp = autoscaling_client.describe_auto_scaling_groups(
             AutoScalingGroupNames=[AUTO_SCALING_GROUP_NAME]
         )
         if not asg_resp.get('AutoScalingGroups'):
-            msg = (
-                f"ASG '{AUTO_SCALING_GROUP_NAME}' not found. Predicted CPU was "
-                f"{predicted_cpu:.2f}%. No scaling action attempted."
-            )
+            msg = f"ASG '{AUTO_SCALING_GROUP_NAME}' not found. Predicted CPU was {predicted_cpu:.2f}%. No scaling action attempted."
             print(msg)
-            return {
-                'statusCode': 200,
-                'body': json.dumps(msg)
-            }
+            return {'statusCode': 200, 'body': json.dumps(msg)}
 
-        asg_description = asg_resp['AutoScalingGroups'][0]
-
-        current_capacity = asg_description['DesiredCapacity']
-        max_capacity = asg_description['MaxSize']
-        min_capacity = asg_description['MinSize']
+        asg = asg_resp['AutoScalingGroups'][0]
+        current_capacity = asg['DesiredCapacity']
+        max_capacity = asg['MaxSize']
+        min_capacity = asg['MinSize']
         print(f"ASG State: Desired={current_capacity}, Min={min_capacity}, Max={max_capacity}")
 
         new_capacity = current_capacity
@@ -103,13 +117,13 @@ def lambda_handler(event, context):
         if predicted_cpu > CPU_UPPER_THRESHOLD:
             new_capacity = min(current_capacity + 1, max_capacity)
             if new_capacity > current_capacity:
-                print(f"SCALING UP: Prediction ({predicted_cpu:.2f}%) is above threshold ({CPU_UPPER_THRESHOLD}%). Setting DesiredCapacity to {new_capacity}.")
+                print(f"SCALING UP: Prediction ({predicted_cpu:.2f}%) is above threshold ({CPU_UPPER_THRESHOLD}%).")
             else:
                 print("ACTION BLOCKED: Prediction is high, but ASG is already at max capacity.")
         elif predicted_cpu < CPU_LOWER_THRESHOLD:
             new_capacity = max(current_capacity - 1, min_capacity)
             if new_capacity < current_capacity:
-                print(f"SCALING DOWN: Prediction ({predicted_cpu:.2f}%) is below threshold ({CPU_LOWER_THRESHOLD}%). Setting DesiredCapacity to {new_capacity}.")
+                print(f"SCALING DOWN: Prediction ({predicted_cpu:.2f}%) is below threshold ({CPU_LOWER_THRESHOLD}%).")
             else:
                 print("ACTION BLOCKED: Prediction is low, but ASG is already at min capacity.")
         else:
@@ -119,8 +133,9 @@ def lambda_handler(event, context):
             autoscaling_client.set_desired_capacity(
                 AutoScalingGroupName=AUTO_SCALING_GROUP_NAME,
                 DesiredCapacity=new_capacity,
-                HonorCooldown=False # Set to True in production to avoid flapping
+                HonorCooldown=False
             )
+            print(f"Set DesiredCapacity to {new_capacity}.")
 
         return {
             'statusCode': 200,
@@ -134,6 +149,5 @@ def lambda_handler(event, context):
             'body': json.dumps(f'Error during scaling logic: {str(e)}')
         }
     finally:
-        # Clean up the downloaded model file from the /tmp/ directory
         if os.path.exists(LOCAL_MODEL_PATH):
             os.remove(LOCAL_MODEL_PATH)

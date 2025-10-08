@@ -20,6 +20,16 @@ from train_model_advanced import (
     ENSEMBLE_DIR
 )
 
+# Resolve project root (one level up from this script directory)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SCRIPT_DIR)
+
+# Robust absolute paths for data and artifacts
+DATA_FILE = os.path.join(ROOT_DIR, 'Data Files', 'multi_metric_data.csv')
+SCALER_FILE = os.path.join(ROOT_DIR, 'scaler_advanced.pkl')
+ENSEMBLE_PATH = os.path.join(ROOT_DIR, ENSEMBLE_DIR)
+RESULTS_PATH = os.path.join(ROOT_DIR, 'evaluation_results.json')
+
 def evaluate_all_models():
     """Evaluate and compare all trained models"""
     
@@ -29,7 +39,7 @@ def evaluate_all_models():
     
     # 1. Load and prepare data
     print("\n📊 Loading Data...")
-    df = pd.read_csv('multi_metric_data.csv', parse_dates=['timestamp'])
+    df = pd.read_csv(DATA_FILE, parse_dates=['timestamp'])
     df = df.sort_values('timestamp')
     df = add_temporal_features(df)
     
@@ -41,8 +51,21 @@ def evaluate_all_models():
         'cpu_diff', 'network_rolling_mean', 'request_rolling_mean'
     ]
     
-    with open('scaler_advanced.pkl', 'rb') as f:
-        scaler = pickle.load(f)
+    # Load scaler; if missing, fit from data to proceed and save for future runs
+    try:
+        with open(SCALER_FILE, 'rb') as f:
+            scaler = pickle.load(f)
+    except FileNotFoundError:
+        print(f"\n⚠️ Scaler not found at: {SCALER_FILE}")
+        print("   Fitting a new MinMaxScaler from the loaded data (may differ from training).")
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        scaler.fit(df[features])
+        try:
+            with open(SCALER_FILE, 'wb') as f:
+                pickle.dump(scaler, f)
+            print(f"   ✓ New scaler saved to: {SCALER_FILE}")
+        except Exception as e:
+            print(f"   ⚠️ Could not save scaler: {e}")
     
     scaled_data = scaler.transform(df[features])
     X, y = create_sequences(scaled_data, 36)
@@ -71,7 +94,7 @@ def evaluate_all_models():
     individual_metrics = []
     
     for i, config in enumerate(configs):
-        model_path = os.path.join(ENSEMBLE_DIR, f'model_{i}.pth')
+        model_path = os.path.join(ENSEMBLE_PATH, f'model_{i}.pth')
         
         if os.path.exists(model_path):
             model = AttentionLSTM(
@@ -114,6 +137,15 @@ def evaluate_all_models():
                 'mae': mae,
                 'accuracy': accuracy
             })
+        else:
+            print(f"   ⚠️ Missing model file: {model_path}")
+
+    # If no models were loaded, exit gracefully with guidance
+    if not ensemble_predictions:
+        print("\n⚠️ No ensemble model files found.")
+        print(f"   Expected in: {ENSEMBLE_PATH}")
+        print("   Train models first: python \"ML training scripts/train_model_advanced.py\"")
+        return
     
     # 3. Evaluate ensemble
     print("\n" + "="*80)
@@ -196,10 +228,10 @@ def evaluate_all_models():
         }
     }
     
-    with open('evaluation_results.json', 'w') as f:
+    with open(RESULTS_PATH, 'w') as f:
         json.dump(results, f, indent=2)
     
-    print(f"\n📁 Results saved to: evaluation_results.json")
+    print(f"\n📁 Results saved to: {RESULTS_PATH}")
 
 if __name__ == "__main__":
     evaluate_all_models()

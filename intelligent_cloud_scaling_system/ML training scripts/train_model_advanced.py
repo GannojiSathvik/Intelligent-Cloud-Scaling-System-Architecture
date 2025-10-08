@@ -11,12 +11,16 @@ import json
 from itertools import product
 
 # Configuration
-LOCAL_DATA_PATH = "multi_metric_data.csv"
-LOCAL_MODEL_PATH = "lstm_model_advanced.pth"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SCRIPT_DIR)
+
+LOCAL_DATA_PATH = os.path.join(ROOT_DIR, "Data Files", "multi_metric_data.csv")
+LOCAL_MODEL_PATH = os.path.join(ROOT_DIR, "lstm_model_advanced.pth")
 ENSEMBLE_DIR = "ensemble_models"
+ENSEMBLE_PATH = os.path.join(ROOT_DIR, ENSEMBLE_DIR)
 
 # Create ensemble directory
-os.makedirs(ENSEMBLE_DIR, exist_ok=True)
+os.makedirs(ENSEMBLE_PATH, exist_ok=True)
 
 # =============================================================================
 # 1. FEATURE ENGINEERING - Add Temporal Features
@@ -193,7 +197,7 @@ def train_single_model(X_train, y_train, X_test, y_test, config, model_id):
         if test_loss < best_test_loss:
             best_test_loss = test_loss
             patience_counter = 0
-            model_path = os.path.join(ENSEMBLE_DIR, f'model_{model_id}.pth')
+            model_path = os.path.join(ENSEMBLE_PATH, f'model_{model_id}.pth')
             torch.save(model.state_dict(), model_path)
         else:
             patience_counter += 1
@@ -230,7 +234,7 @@ def train_ensemble(X_train, y_train, X_test, y_test, num_models=5):
         print(f"   ✓ Model {i+1} Test Loss: {test_loss:.6f}")
     
     # Save ensemble info
-    with open(os.path.join(ENSEMBLE_DIR, 'ensemble_info.json'), 'w') as f:
+    with open(os.path.join(ENSEMBLE_PATH, 'ensemble_info.json'), 'w') as f:
         json.dump(ensemble_info, f, indent=2)
     
     print(f"\n✓ Ensemble training complete!")
@@ -326,7 +330,7 @@ def train_advanced_model():
     
     # Save scaler for later use
     import pickle
-    with open('scaler_advanced.pkl', 'wb') as f:
+    with open(os.path.join(ROOT_DIR, 'scaler_advanced.pkl'), 'wb') as f:
         pickle.dump(scaler, f)
     
     # Create sequences (use longer sequence)
@@ -356,7 +360,7 @@ def train_advanced_model():
     )
     
     # Copy final model to main location
-    os.system(f'cp {ENSEMBLE_DIR}/model_final.pth {LOCAL_MODEL_PATH}')
+    os.system(f'cp {os.path.join(ENSEMBLE_PATH, "model_final.pth")} {LOCAL_MODEL_PATH}')
     
     # 7. Evaluate Ensemble
     print("\n📊 Step 7: Evaluating Ensemble Performance...")
@@ -365,9 +369,9 @@ def train_advanced_model():
     print("\n" + "="*80)
     print("✅ ADVANCED TRAINING COMPLETE!")
     print("="*80)
-    print(f"\n📁 Models saved in: {ENSEMBLE_DIR}/")
+    print(f"\n📁 Models saved in: {ENSEMBLE_PATH}/")
     print(f"📁 Final best model: {LOCAL_MODEL_PATH}")
-    print(f"📁 Scaler saved: scaler_advanced.pkl")
+    print(f"📁 Scaler saved: {os.path.join(ROOT_DIR, 'scaler_advanced.pkl')}")
 
 def evaluate_ensemble(X_test, y_test, scaler, features):
     """Evaluate ensemble predictions"""
@@ -376,7 +380,7 @@ def evaluate_ensemble(X_test, y_test, scaler, features):
     X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
     
     # Load ensemble info to get correct configs
-    with open(os.path.join(ENSEMBLE_DIR, 'ensemble_info.json'), 'r') as f:
+    with open(os.path.join(ENSEMBLE_PATH, 'ensemble_info.json'), 'r') as f:
         ensemble_info = json.load(f)
     
     # Configurations for each model
@@ -392,7 +396,7 @@ def evaluate_ensemble(X_test, y_test, scaler, features):
     ensemble_predictions = []
     
     for i, config in enumerate(configs):
-        model_path = os.path.join(ENSEMBLE_DIR, f'model_{i}.pth')
+        model_path = os.path.join(ENSEMBLE_PATH, f'model_{i}.pth')
         if os.path.exists(model_path):
             model = AttentionLSTM(
                 X_test.shape[2], 
