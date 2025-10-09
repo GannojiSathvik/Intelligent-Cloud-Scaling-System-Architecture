@@ -450,7 +450,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 For questions or support:
-- 📧 Email: your.email@example.com
+- 📧 Email: gannojisathvik24@gmail.com
 - 🐛 Issues: [GitHub Issues](https://github.com/GannojiSathvik/Intelligent-Cloud-Scaling-System-Architecture/issues)
 - 💬 Discussions: [GitHub Discussions](https://github.com/GannojiSathvik/Intelligent-Cloud-Scaling-System-Architecture/discussions)
 
