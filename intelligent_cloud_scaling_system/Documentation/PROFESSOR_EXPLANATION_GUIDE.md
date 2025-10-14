@@ -35,7 +35,6 @@ CPU Spike → Threshold Breached → Scale Up → Wait 2-3 min → Problem Solve
 
 My Solution:
 Predict Spike → Scale Up Proactively → Instances Ready → Spike Arrives → No Impact!
-```
 
 ### Your Solution:
 
