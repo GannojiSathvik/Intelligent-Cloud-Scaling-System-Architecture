@@ -7,8 +7,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # Configuration
-LOCAL_MODEL_PATH = "lstm_model.pth"
-LOCAL_DATA_PATH = "multi_metric_data.csv"
+LOCAL_MODEL_PATH = "intelligent_cloud_scaling_system/Trained Models/lstm_model.pth"
+LOCAL_DATA_PATH = "intelligent_cloud_scaling_system/Data Files/multi_metric_data.csv"
 SEQUENCE_LENGTH = 12
 HIDDEN_SIZE = 50
 NUM_LAYERS = 2

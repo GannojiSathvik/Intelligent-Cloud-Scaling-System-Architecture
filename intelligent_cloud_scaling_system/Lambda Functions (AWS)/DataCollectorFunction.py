@@ -6,10 +6,10 @@ import csv
 import io
 
 # --- Configuration ---
-S3_BUCKET_NAME = "my-intelligent-scaling-data-bucket"
+S3_BUCKET_NAME = "sathvik-scaling-data-us-east-2"
 DATA_FILE_KEY = "multi_metric_data.csv"
-CALENDAR_FILE_KEY = "business_calendar.json"
-AUTO_SCALING_GROUP_NAME = "intelligent-scaling-demo-sathvik"
+CALENDAR_FILE_KEY = "config/business_calendar.json" # Corrected path based on GetDashboardDataFunction.py
+AUTO_SCALING_GROUP_NAME = "IntelligentScaling-ASG"
 CLOUDWATCH_METRIC_NAMESPACE = "AWS/EC2"
 
 s3_client = boto3.client('s3')
@@ -58,7 +58,7 @@ def lambda_handler(event, context):
         # In a real system, this would come from a load balancer or application metric.
         request_count = 0 # Placeholder
 
-        print(f"Collected metrics: CPU={cpu_utilization:.2f}%, NetworkIn={network_in:.2f} bytes")
+        print(f"Collected metrics: CPU={cpu_utilization:.2f}%, NetworkIn={network_in:.2f} bytes, IsSaleActive={is_sale_active}")
 
         # --- 3. Append Data to CSV in S3 ---
         new_row = [
@@ -68,14 +68,21 @@ def lambda_handler(event, context):
             request_count,
             is_sale_active
         ]
+        print(f"New row to append: {new_row}")
 
         try:
             # Get the existing CSV file
             csv_obj = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=DATA_FILE_KEY)
             old_content = csv_obj['Body'].read().decode('utf-8')
+            print(f"Existing CSV content length: {len(old_content)} bytes")
         except s3_client.exceptions.NoSuchKey:
             print(f"'{DATA_FILE_KEY}' not found. Creating a new file with headers.")
             old_content = "timestamp,cpu_utilization,network_in,request_count,is_sale_active\n"
+        except Exception as e:
+            print(f"Error getting existing CSV from S3: {e}")
+            # Fallback to creating new file if there's an error reading existing one
+            old_content = "timestamp,cpu_utilization,network_in,request_count,is_sale_active\n"
+
 
         # Append the new row
         output = io.StringIO()
@@ -83,11 +90,12 @@ def lambda_handler(event, context):
         writer = csv.writer(output)
         writer.writerow(new_row)
         new_content = output.getvalue()
+        print(f"New CSV content length: {len(new_content)} bytes")
 
         # Upload the updated CSV back to S3
+        print(f"Attempting to upload updated CSV to s3://{S3_BUCKET_NAME}/{DATA_FILE_KEY}")
         s3_client.put_object(Bucket=S3_BUCKET_NAME, Key=DATA_FILE_KEY, Body=new_content)
-
-        print(f"Successfully appended data to '{DATA_FILE_KEY}' in S3.")
+        print(f"Successfully uploaded updated CSV to s3://{S3_BUCKET_NAME}/{DATA_FILE_KEY}")
 
         return {
             'statusCode': 200,
